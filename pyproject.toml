@@ -1,0 +1,18 @@
+[project]
+name = "apppolicy-scanner"
+version = "0.1.0"
+description = "Local-first scanner that maps Apple/Google policy requirements to your iOS/Android manifests."
+authors = [{ name = "AppPolicy Team", email = "support@example.com" }]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["pyyaml>=6,<7"]
+
+[project.scripts]
+apppolicy = "cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["apcop"]

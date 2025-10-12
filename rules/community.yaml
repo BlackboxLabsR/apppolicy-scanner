@@ -1,0 +1,43 @@
+version: "0.1-community"
+rules:
+  - id: android.target_sdk.minimum
+    platform: android
+    severity: blocking
+    when:
+      all:
+        - android.targetsdk.lt_policy_min: 34
+    because:
+      source: google.play.policies
+      section: "Target API level"
+      url: "https://developer.android.com/google/play/requirements/target-sdk"
+    then:
+      policy_min: 34
+      require: []
+
+  - id: android.permission.background_location.disclosure
+    platform: android
+    severity: advisory
+    when:
+      any:
+        - android.permission.present: android.permission.ACCESS_BACKGROUND_LOCATION
+    because:
+      source: google.play.policies
+      section: "Background Location"
+      url: "https://support.google.com/googleplay/android-developer/answer/9799150"
+    then:
+      require: []
+
+  - id: apple.permissions.camera.usage_description
+    platform: ios
+    severity: advisory
+    when:
+      any:
+        - ios.api.uses: AVCaptureDevice
+        - ios.api.uses: UIImagePickerController
+    because:
+      source: apple.permissions
+      section: "Camera — Usage Description"
+      url: "https://developer.apple.com/documentation/bundleresources/information_property_list/nscamerausagedescription"
+    then:
+      require:
+        - ios.plist.has: NSCameraUsageDescription
