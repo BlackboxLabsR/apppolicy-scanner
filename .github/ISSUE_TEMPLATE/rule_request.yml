@@ -1,0 +1,73 @@
+name: Rule request
+description: Request a new rule or propose changes to an existing rule
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to propose a new rule or suggest changes to an existing rule.
+        Include links to the official Apple/Google policy pages.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Android
+        - iOS
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: policy_url
+    attributes:
+      label: Policy URL(s)
+      description: Link(s) to official Apple/Google policy page(s)
+      placeholder: https://developer.apple.com/app-store/review/guidelines/
+    validations:
+      required: true
+
+  - type: textarea
+    id: policy_excerpt
+    attributes:
+      label: Relevant policy text
+      description: Copy the exact policy excerpt that motivates the rule
+
+  - type: textarea
+    id: detection
+    attributes:
+      label: Detection signals
+      description: |
+        Describe what the rule should look for (e.g., permissions, Info.plist keys, Android intents/activities, symbols, SDK usage).
+      placeholder: |
+        - permissions: [android.permission.ACCESS_BACKGROUND_LOCATION]
+        - plist_keys: [NSCameraUsageDescription]
+        - symbols: [UIImagePickerController]
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples / test cases
+      description: Provide minimal manifests/plists or facts that should trigger or not trigger the rule
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Suggested severity
+      options:
+        - info
+        - warning
+        - error
+
+  - type: textarea
+    id: false_positives
+    attributes:
+      label: False positives considerations
+      description: Any known conditions where the rule might misfire and how to mitigate
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any other details or references

@@ -1,0 +1,87 @@
+name: Bug report
+description: Report a bug in apppolicy-scanner
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug!
+        Please fill out the details below to help us reproduce and fix it.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `apppolicy --version` or installed package version
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: 3.11.6
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Clear and concise description of the bug
+      placeholder: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Step-by-step instructions to reproduce the behavior
+      value: |
+        1. ...
+        2. ...
+        3. ...
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What did you expect to happen?
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: What actually happened?
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and tracebacks
+      description: Paste any relevant output with `-vv` or stack traces
+      render: shell
+
+  - type: textarea
+    id: sample
+    attributes:
+      label: Minimal sample (facts/manifests)
+      description: Provide a minimal AndroidManifest.xml/Info.plist or facts used during the scan
+
+  - type: textarea
+    id: rules
+    attributes:
+      label: Rules file and rule IDs
+      description: E.g., `rules/community.yaml` and the rule IDs triggered
+
