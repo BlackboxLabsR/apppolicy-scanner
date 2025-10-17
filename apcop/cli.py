@@ -1,9 +1,9 @@
 import argparse, json, pathlib
-from apcop.ios_scan import scan_ios
-from apcop.android_scan import scan_android
-from apcop.rules import evaluate_rules, load_rules
-from apcop.report import render_html
-from apcop.pro_pack import load_rules_pack
+from .ios_scan import scan_ios
+from .android_scan import scan_android
+from .rules import evaluate_rules, load_rules
+from .report import render_html
+from .pro_pack import load_rules_pack
 
 def main():
     parser = argparse.ArgumentParser(prog="apppolicy", description="AppPolicy scanner & evaluator")
