@@ -85,8 +85,10 @@ def _render_card(f: Dict) -> str:
     if url or section:
         link_text = html.escape(section) if section else html.escape(url)
         u = html.escape(url) if url else "#"
+        # fixed anchor tag
         doc_link = f'<div class="policy"><b>Policy:</b> <a href="{u}" target="_blank" rel="noreferrer noopener">{link_text}</a></div>'
 
+    # Why / How (curated + fallbacks)
     why, how_list = _why_how_for(f)
 
     # Missing / Required list (if any)
