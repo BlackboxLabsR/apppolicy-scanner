@@ -1,45 +1,80 @@
-import html, json
-CSS = '''
-body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
-.badge { display:inline-block; padding:2px 8px; border-radius:8px; font-size:12px; }
-.sev-blocking { background:#fee; color:#900; }
-.sev-advisory { background:#eef; color:#225; }
-.sev-fyi { background:#efe; color:#252; }
-.card { border:1px solid #ddd; border-radius:8px; padding:16px; margin:16px 0; }
-h1 { margin-top:0; }
-code { background:#f5f5f5; padding:1px 4px; border-radius:4px; }
-a { color:#06c; text-decoration:none; }
-a:hover { text-decoration:underline; }
-'''
-def severity_badge(sev):
-    cls = {"blocking":"sev-blocking","advisory":"sev-advisory","fyi":"sev-fyi"}.get(sev, "sev-advisory")
+from __future__ import annotations
+import html
+from collections import defaultdict
+from importlib import resources
+from typing import Dict, List
+
+# NOTE: We keep rendering logic here but structure & CSS live in /templates and /assets.
+
+def _load_text(package: str, resource_path: str) -> str:
+    """
+    Load a text resource from the package (PEP 302 importlib.resources).
+    """
+    return resources.files(package).joinpath(resource_path).read_text(encoding="utf-8")
+
+def severity_badge(sev: str) -> str:
+    sev = (sev or "advisory").lower()
+    cls = {"blocking": "sev-blocking", "advisory": "sev-advisory", "fyi": "sev-fyi"}.get(sev, "sev-advisory")
     return f'<span class="badge {cls}">{html.escape(sev.upper())}</span>'
-def render_html(report: dict) -> str:
-    parts = []
-    parts.append("<!doctype html><meta charset='utf-8'><title>AppPolicy Report</title>")
-    parts.append(f"<style>{CSS}</style>")
-    parts.append("<h1>AppPolicy Copilot — Report</h1>")
-    summary = report.get("summary", {})
-    parts.append(f"<p>Summary: Blocking {summary.get('blocking',0)} • Advisory {summary.get('advisory',0)} • FYI {summary.get('fyi',0)}</p>")
-    for f in report.get("findings", []):
-        sev = f.get("severity","advisory")
-        because = f.get("because",{})
-        url = because.get("url","")
-        section = because.get("section","")
-        parts.append('<div class="card">')
-        parts.append(f"<div>{severity_badge(sev)} <strong>{html.escape(f.get('id',''))}</strong></div>")
-        link = f" — <a href='{html.escape(url)}' target='_blank'>{html.escape(section or url)}</a>" if (section or url) else ""
-        parts.append(f"<div style='margin:6px 0 12px 0;'>Policy{link}</div>")
-        missing = f.get("missing",[])
-        if missing:
-            parts.append("<div><strong>Missing / Required:</strong></div><ul>")
-            for m in missing:
-                parts.append(f"<li><code>{html.escape(json.dumps(m) if isinstance(m,dict) else str(m))}</code></li>")
-            parts.append("</ul>")
-        ev = f.get("evidence", {})
-        if ev:
-            parts.append("<details><summary>Evidence</summary><pre>")
-            parts.append(html.escape(json.dumps(ev, indent=2)))
-            parts.append("</pre></details>")
-        parts.append("</div>")
-    return "\n".join(parts)
+
+def _render_card(f: Dict) -> str:
+    sev = f.get("severity", "advisory")
+    because = f.get("because", {}) or {}
+    url = because.get("url") or ""
+    section = because.get("section") or ""
+    doc_link = ""
+    if url or section:
+        link_text = html.escape(section) if section else html.escape(url)
+        u = html.escape(url) if url else "#"
+        doc_link = f'<div class="policy"><b>Policy:</b> <a href="{u}" target="_blank" rel="noreferrer noopener">{link_text}</a></div>'
+
+    # Placeholders for now (later can be enriched from rule metadata)
+    why = f.get("why") or f"Rule **{html.escape(f.get('id',''))}** triggered by detected facts."
+    how = f.get("how") or "See linked policy for remediation steps; update settings/permissions/metadata accordingly."
+
+    # Evidence (optional)
+    evidence = f.get("evidence") or {}
+    ev_html = ""
+    if evidence:
+        import json
+        ev_html = f"<details><summary>Evidence</summary><pre>{html.escape(json.dumps(evidence, indent=2))}</pre></details>"
+
+    return (
+        '<div class="card">'
+        f'<div class="title">{severity_badge(sev)} <span class="id">{html.escape(f.get("id",""))}</span></div>'
+        f'{doc_link}'
+        f'<div class="why"><b>Why this matters:</b> {html.escape(why)}</div>'
+        f'<div class="how"><b>How to fix:</b> {html.escape(how)}</div>'
+        f'{ev_html}'
+        '</div>'
+    )
+
+def render_html(report: Dict) -> str:
+    # Load template & CSS from package resources
+    template = _load_text("apcop.templates", "report.html")
+    css = _load_text("apcop.assets", "report.css")
+
+    # Group findings by platform
+    grouped: Dict[str, List[Dict]] = defaultdict(list)
+    for f in report.get("findings", []) or []:
+        grouped[(f.get("platform") or "other").lower()].append(f)
+
+    def render_group(key: str) -> str:
+        return "\n".join(_render_card(f) for f in grouped.get(key, [])) or "<div class=\"card\">No findings.</div>"
+
+    summary = report.get("summary") or {}
+    blocking = int(summary.get("blocking", 0) or 0)
+    advisory = int(summary.get("advisory", 0) or 0)
+    fyi = int(summary.get("fyi", 0) or 0)
+
+    html_out = (
+        template
+        .replace("{{ CSS }}", css)
+        .replace("{{ BLOCKING_COUNT }}", str(blocking))
+        .replace("{{ ADVISORY_COUNT }}", str(advisory))
+        .replace("{{ FYI_COUNT }}", str(fyi))
+        .replace("{{ IOS_CARDS }}", render_group("ios"))
+        .replace("{{ ANDROID_CARDS }}", render_group("android"))
+        .replace("{{ OTHER_CARDS }}", render_group("other"))
+    )
+    return html_out

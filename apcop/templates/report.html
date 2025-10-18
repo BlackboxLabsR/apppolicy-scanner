@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AppPolicy Copilot — Report</title>
+  <style>{{ CSS }}</style>
+</head>
+<body>
+  <header class="header">
+    <h1>AppPolicy Copilot — Report</h1>
+    <div class="summary">
+      <span class="badge sev-blocking">BLOCKING: {{ BLOCKING_COUNT }}</span>
+      <span class="badge sev-advisory">ADVISORY: {{ ADVISORY_COUNT }}</span>
+      <span class="badge sev-fyi">FYI: {{ FYI_COUNT }}</span>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>iOS Findings</h2>
+      <div class="cards">
+        {{ IOS_CARDS }}
+      </div>
+    </section>
+
+    <section>
+      <h2>Android Findings</h2>
+      <div class="cards">
+        {{ ANDROID_CARDS }}
+      </div>
+    </section>
+
+    <section>
+      <h2>Other Findings</h2>
+      <div class="cards">
+        {{ OTHER_CARDS }}
+      </div>
+    </section>
+  </main>
+</body>
+</html>
