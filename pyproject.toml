@@ -6,8 +6,6 @@ authors = [{ name = "AppPolicy Team", email = "contact@blackboxlabs.ro" }]
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["pyyaml>=6,<7"]
-optional-dependencies = { pro = ["pynacl>=1.5,<2"] }
-
 
 [project.optional-dependencies]
 pro = ["pynacl>=1.5,<2"]
