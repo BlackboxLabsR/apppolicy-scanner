@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  test-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,24 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[pro]
-          pip install pytest
+          pip install pytest build
 
       - name: Run tests
         run: pytest -q
+
+      - name: Build wheel (smoke)
+        run: python -m build
+
+      - name: Verify wheel includes templates/assets
+        run: |
+          WHEEL=$(ls dist/*whl | head -n1)
+          python - <<'PY'
+          import sys, zipfile, glob
+          w = glob.glob("dist/*.whl")[0]
+          z = zipfile.ZipFile(w)
+          names = z.namelist()
+          need = ["apcop/templates/report.html", "apcop/assets/report.css"]
+          missing = [p for p in need if p not in names]
+          assert not missing, f"Missing from wheel: {missing}"
+          print("Wheel contains required assets.")
+          PY
