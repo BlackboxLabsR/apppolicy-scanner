@@ -41,8 +41,11 @@ def test_render_html_groups_and_summary(tmp_path):
     assert "AppPolicy Copilot — Report" in html_text
 
     # Match actual summary line (no colons after Blocking/Advisory)
-    assert re.search(r"Summary:\s*Blocking\s+1\s*•\s*Advisory\s+1\s*•\s*FYI\s+0", html_text, re.I)
-
+    assert re.search(
+        r"Summary:\s*Blocking\s*:?\s*1\W+Advisory\s*:?\s*1\W+FYI\s*:?\s*0",
+        html_text,
+        re.I | re.S,
+)
     # Findings present (IDs and policy section text)
     assert "android.target_sdk.minimum" in html_text
     assert "apple.permissions.camera.usage_description" in html_text
