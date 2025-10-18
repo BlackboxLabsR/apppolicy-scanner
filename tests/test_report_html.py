@@ -33,7 +33,7 @@ def test_render_html_groups_and_summary(tmp_path):
     (tmp_path / "report.html").write_text(html_text, encoding="utf-8")
 
     # Basic title check
-    assert "AppPolicy Copilot — Report" in html_text
+    assert "AppPolicy Report" in html_text
 
     # Summary numbers (flexible formatting)
     assert re.search(r"Blocking\D*1", html_text, re.I)
