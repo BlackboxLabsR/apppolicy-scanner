@@ -1,23 +1,28 @@
 <!doctype html><meta charset="utf-8">
-<link rel="stylesheet" href="report.css">
 <title>AppPolicy Report</title>
+<style>{{ css }}</style>
 <header>
   <h1>AppPolicy – Policy Readiness</h1>
   <p class="summary">
     Blocking: {{ summary.blocking }} • Advisory: {{ summary.advisory }} • FYI: {{ summary.fyi }}
   </p>
 </header>
+
 {% for platform in ["ios","android"] %}
 <section>
   <h2>{{ platform|upper }}</h2>
-  {% for f in findings if f.platform==platform %}
+  {% for f in findings if (f.platform or "other")|lower == platform %}
   <article class="card">
     <div class="row">
-      <span class="badge {{ f.severity }}">{{ f.severity|upper }}</span>
+      <span class="badge {{ f.severity|lower }}">{{ f.severity|upper }}</span>
       <strong>{{ f.id }}</strong>
     </div>
-    {% if f.because.url or f.because.section %}
-    <div class="small">Policy: <a href="{{ f.because.url }}" target="_blank">{{ f.because.section or f.because.url }}</a></div>
+    {% if f.because and (f.because.url or f.because.section) %}
+      <div class="small">
+        Policy: <a href="{{ f.because.url }}" target="_blank" rel="noreferrer noopener">
+          {{ f.because.section or f.because.url }}
+        </a>
+      </div>
     {% endif %}
     {% if f.why %}<p><strong>Why this matters:</strong> {{ f.why }}</p>{% endif %}
     {% if f.how %}
@@ -25,12 +30,14 @@
         <ul>{% for step in f.how %}<li>{{ step }}</li>{% endfor %}</ul>
       </div>
     {% endif %}
-    {% if f.missing and f.missing|length > 0 %}
+    {% if f.missing %}
       <div class="small"><strong>Required keys/reasons not found:</strong>
         <ul>{% for m in f.missing %}<li><code>{{ m }}</code></li>{% endfor %}</ul>
       </div>
     {% endif %}
   </article>
+  {% else %}
+    <div class="card">No findings.</div>
   {% endfor %}
 </section>
 {% endfor %}

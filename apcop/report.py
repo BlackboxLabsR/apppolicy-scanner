@@ -4,6 +4,8 @@ import json
 from collections import defaultdict
 from importlib import resources
 from typing import Dict, List
+from jinja2 import Environment, BaseLoader
+
 
 # NOTE: We keep rendering logic here but structure & CSS live in /templates and /assets.
 
@@ -127,32 +129,28 @@ def _render_card(f: Dict) -> str:
     )
 
 def render_html(report: Dict) -> str:
-    # Load template & CSS from package resources
-    template = _load_text("apcop.templates", "report.html")
+    # Load raw template & CSS
+    template_src = _load_text("apcop.templates", "report.html")
     css = _load_text("apcop.assets", "report.css")
 
-    # Group findings by platform
+    # Group findings
     grouped: Dict[str, List[Dict]] = defaultdict(list)
     for f in report.get("findings", []) or []:
+        # enrich why/how in place for convenience
+        why, how = _why_how_for(f)
+        f["why"], f["how"] = why, how
         grouped[(f.get("platform") or "other").lower()].append(f)
 
-    def render_group(key: str) -> str:
-        cards = [_render_card(f) for f in grouped.get(key, [])]
-        return "\n".join(cards) if cards else '<div class="card">No findings.</div>'
-
     summary = report.get("summary") or {}
-    blocking = int(summary.get("blocking", 0) or 0)
-    advisory = int(summary.get("advisory", 0) or 0)
-    fyi = int(summary.get("fyi", 0) or 0)
-
-    html_out = (
-        template
-        .replace("{{ CSS }}", css)
-        .replace("{{ BLOCKING_COUNT }}", str(blocking))
-        .replace("{{ ADVISORY_COUNT }}", str(advisory))
-        .replace("{{ FYI_COUNT }}", str(fyi))
-        .replace("{{ IOS_CARDS }}", render_group("ios"))
-        .replace("{{ ANDROID_CARDS }}", render_group("android"))
-        .replace("{{ OTHER_CARDS }}", render_group("other"))
+    env = Environment(loader=BaseLoader(), autoescape=True)
+    tmpl = env.from_string(template_src)
+    html_out = tmpl.render(
+        summary={
+            "blocking": int(summary.get("blocking") or 0),
+            "advisory": int(summary.get("advisory") or 0),
+            "fyi": int(summary.get("fyi") or 0),
+        },
+        findings=report.get("findings") or [],
+        css=css,
     )
     return html_out
