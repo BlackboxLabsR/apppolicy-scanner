@@ -1,41 +1,43 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>AppPolicy Copilot — Report</title>
-  <style>{{ CSS }}</style>
-</head>
-<body>
-  <header class="header">
-    <h1>AppPolicy Copilot — Report</h1>
-    <div class="summary">
-      <span class="badge sev-blocking">BLOCKING: {{ BLOCKING_COUNT }}</span>
-      <span class="badge sev-advisory">ADVISORY: {{ ADVISORY_COUNT }}</span>
-      <span class="badge sev-fyi">FYI: {{ FYI_COUNT }}</span>
+<!doctype html><meta charset="utf-8">
+<title>AppPolicy Report</title>
+<style>{{ css }}</style>
+<header>
+  <h1>AppPolicy – Policy Readiness</h1>
+  <p class="summary">
+    Blocking: {{ summary.blocking }} • Advisory: {{ summary.advisory }} • FYI: {{ summary.fyi }}
+  </p>
+</header>
+
+{% for platform in ["ios","android"] %}
+<section>
+  <h2>{{ platform|upper }}</h2>
+  {% for f in findings if (f.platform or "other")|lower == platform %}
+  <article class="card">
+    <div class="row">
+      <span class="badge {{ f.severity|lower }}">{{ f.severity|upper }}</span>
+      <strong>{{ f.id }}</strong>
     </div>
-  </header>
-
-  <main>
-    <section>
-      <h2>Android Findings</h2>
-      <div class="cards">
-        {{ ANDROID_CARDS }}
+    {% if f.because and (f.because.url or f.because.section) %}
+      <div class="small">
+        Policy: <a href="{{ f.because.url }}" target="_blank" rel="noreferrer noopener">
+          {{ f.because.section or f.because.url }}
+        </a>
       </div>
-    </section>
-
-    <section>
-      <h2>iOS Findings</h2>
-      <div class="cards">
-        {{ IOS_CARDS }}
+    {% endif %}
+    {% if f.why %}<p><strong>Why this matters:</strong> {{ f.why }}</p>{% endif %}
+    {% if f.how %}
+      <div><strong>How to fix:</strong>
+        <ul>{% for step in f.how %}<li>{{ step }}</li>{% endfor %}</ul>
       </div>
-    </section>
-
-    <section>
-      <h2>Other Findings</h2>
-      <div class="cards">
-        {{ OTHER_CARDS }}
+    {% endif %}
+    {% if f.missing %}
+      <div class="small"><strong>Required keys/reasons not found:</strong>
+        <ul>{% for m in f.missing %}<li><code>{{ m }}</code></li>{% endfor %}</ul>
       </div>
-    </section>
-  </main>
-</body>
-</html>
+    {% endif %}
+  </article>
+  {% else %}
+    <div class="card">No findings.</div>
+  {% endfor %}
+</section>
+{% endfor %}

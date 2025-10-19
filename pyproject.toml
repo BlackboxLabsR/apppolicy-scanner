@@ -4,7 +4,10 @@ version = "1.0.3"
 description = "Local-first scanner that maps Apple/Google policy requirements to your iOS/Android manifests."
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = ["pyyaml>=6,<7"]
+dependencies = [
+  "pyyaml>=6,<7",
+  "jinja2>=3.1,<4"
+]
 optional-dependencies = { pro = ["pynacl>=1.5,<2"] }
 
 [project.scripts]

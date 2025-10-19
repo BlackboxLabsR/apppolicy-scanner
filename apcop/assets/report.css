@@ -8,6 +8,11 @@ h2 { margin-top: 24px; }
 .sev-blocking { background: #ffebeb; color: #c00; border: 1px solid #f5bcbc; }
 .sev-advisory { background: #e8f0ff; color: #0366d6; border: 1px solid #bcd3ff; }
 .sev-fyi { background: #eaffea; color: #22863a; border: 1px solid #bde5c8; }
+.row { display:flex; gap:10px; align-items:center; margin-bottom:6px; }
+.badge.blocking { background:#b91c1c; }
+.badge.advisory { background:#2563eb; }
+.badge.fyi { background:#10b981; }
+.small { color: #444; font-size: 13px; }
 
 .cards { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; background: #fff; }
