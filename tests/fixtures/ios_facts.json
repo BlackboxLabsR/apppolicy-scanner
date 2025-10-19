@@ -1,0 +1,7 @@
+{
+  "platform":"ios",
+  "plist_keys":["NSCameraUsageDescription"],
+  "entitlements":{},
+  "privacy_manifest":{},
+  "signals":{"auth_present":true,"sdk_names":["firebaseauth"],"symbols":["UNUserNotificationCenter"]}
+}

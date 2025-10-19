@@ -102,6 +102,7 @@ def evaluate_rules(facts_list, rules_doc):
         if any(k in when for k in ["android.targetsdk.lt_policy_min"]) or policy_min:
             extra["policy_minimum"] = policy_min
 
+        rule_then = r.get("then") or {}
         finding = {
             "id": rid,
             "platform": platform,
@@ -109,9 +110,11 @@ def evaluate_rules(facts_list, rules_doc):
             "status": "fail" if (missing or severity == "blocking") else "warn",
             "missing": missing,
             "because": because,
+            "then": rule_then,  # <-- include this so report can show How-to
             "evidence": {
                 "matched_when": when,
-                "facts_used": {k: list(v) if isinstance(v, set) else v for k,v in idx.items() if k.startswith(platform)}
+                "facts_used": {k: list(v) if isinstance(v, set) else v
+                            for k,v in idx.items() if k.startswith(platform)}
             }
         }
         if extra:
