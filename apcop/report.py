@@ -4,7 +4,7 @@ from collections import defaultdict
 from importlib import resources
 from typing import Dict, List
 
-# Fallback HTML/CSS (no Jinja) with visible counts
+# Fallback HTML/CSS (no Jinja) that includes summary counts and rendered cards
 _FALLBACK_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
@@ -42,7 +42,6 @@ body { font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans
 """
 
 def _res_text(path: str) -> str:
-    """Load a resource inside the apcop package or return empty string."""
     try:
         return (resources.files("apcop") / path).read_text(encoding="utf-8")
     except Exception:
@@ -50,37 +49,41 @@ def _res_text(path: str) -> str:
 
 def severity_badge(sev: str) -> str:
     sev = (sev or "advisory").lower()
-    cls = {"blocking": "sev-blocking", "advisory": "sev-advisory", "fyi": "sev-fyi"}.get(sev, "sev-advisory")
+    cls = {"blocking":"sev-blocking","advisory":"sev-advisory","fyi":"sev-fyi"}.get(sev,"sev-advisory")
     return f'<span class="badge {cls}">{html.escape(sev.upper())}</span>'
 
 def _render_card(f: Dict) -> str:
-    sev = f.get("severity", "advisory")
-    because = f.get("because", {}) or {}
-    url = because.get("url") or ""
-    section = because.get("section") or ""
+    sev = f.get("severity","advisory")
+    because = f.get("because",{}) or {}
+    url = because.get("url") or ""; section = because.get("section") or ""
     plat = (f.get("platform") or "").lower()
-    plat_badge = " 🍎 iOS" if plat == "ios" else (" 🤖 Android" if plat == "android" else "")
-    # Policy link
+    plat_badge = " 🍎 iOS" if plat=="ios" else (" 🤖 Android" if plat=="android" else "")
+
+    # policy link
     doc_link = ""
     if url or section:
         link_text = html.escape(section) if section else html.escape(url)
         doc_link = f'<div class="policy"><b>Policy:</b> <a href="{html.escape(url) or "#"}" target="_blank" rel="noreferrer noopener">{link_text}</a></div>'
-    # Why / How
+
+    # why/how
     section_text = because.get("section") or ""
-    remediation = []
+    remediation: List[str] = []
     then_obj = f.get("then") or {}
     if isinstance(then_obj, dict) and isinstance(then_obj.get("remediation"), list):
         remediation = then_obj["remediation"]
     if not remediation:
         remediation = f.get("remediation") or []
+
     why_html = f'<div class="why"><b>Why this matters:</b> {html.escape(section_text)}</div>' if section_text else ""
     how_html = ""
     if remediation:
         items = "".join(f"<li>{html.escape(r)}</li>" for r in remediation)
         how_html = f'<div class="how"><b>How to fix:</b><ul>{items}</ul></div>'
-    # Evidence
-    evidence = f.get("evidence") or {}
-    ev_html = f"<details><summary>Evidence</summary><pre>{html.escape(json.dumps(evidence, indent=2))}</pre></details>" if evidence else ""
+
+    # evidence
+    ev = f.get("evidence") or {}
+    ev_html = f"<details><summary>Evidence</summary><pre>{html.escape(json.dumps(ev, indent=2))}</pre></details>" if ev else ""
+
     return (
         '<div class="card">'
         f'<div class="title">{severity_badge(sev)} <span class="id">{html.escape(f.get("id",""))}</span>{plat_badge}</div>'
@@ -92,52 +95,15 @@ def _cards_for(grouped: Dict[str, List[Dict]], key: str) -> str:
     L = grouped.get(key, [])
     return "\n".join(_render_card(f) for f in L) if L else '<div class="card">No findings.</div>'
 
-def _manual_render_jinja(template: str, css: str, summary: Dict[str, int], grouped: Dict[str, List[Dict]]) -> str:
-    """
-    Minimal manual renderer for the Jinja-ish template when jinja2 is not installed.
-    It handles:
-      - {{ css }}, {{ summary.blocking }}, {{ summary.advisory }}, {{ summary.fyi }}
-      - {% for g in groups %} ... {{ g.name }} ... {{ g.cards | safe }} ... {% endfor %}
-    """
-    # Replace simple variables
-    out = (template
-           .replace("{{ css }}", css)
-           .replace("{{ summary.blocking }}", str(summary["blocking"]))
-           .replace("{{ summary.advisory }}", str(summary["advisory"]))
-           .replace("{{ summary.fyi }}", str(summary["fyi"])))
-
-    # Render groups loop
-    loop_pat = re.compile(r"{%.*?for\s+g\s+in\s+groups\s*%}(.*?){%.*?endfor\s*%}", re.S)
-    def repl_loop(m: re.Match) -> str:
-        inner = m.group(1)
-        pieces = []
-        groups = [
-            ("iOS",     _cards_for(grouped, "ios")),
-            ("Android", _cards_for(grouped, "android")),
-            ("Other",   _cards_for(grouped, "other")),
-        ]
-        for name, cards in groups:
-            block = inner
-            # Support both {{ g.cards }} and {{ g.cards | safe }}
-            block = block.replace("{{ g.name }}", name)
-            block = block.replace("{{ g.cards | safe }}", cards)
-            block = block.replace("{{ g.cards }}", cards)
-            pieces.append(block)
-        return "".join(pieces)
-
-    out = re.sub(loop_pat, repl_loop, out)
-    return out
-
 def render_html(report: Dict) -> str:
-    # Load packaged template (may be Jinja) and CSS; or fallback
-    template = _res_text("templates/report.html")
+    # Load packaged template (may be Jinja) and CSS
+    jinja_template = _res_text("templates/report.html")
     css = _res_text("assets/report.css") or _FALLBACK_CSS
 
-    # Group findings by platform & compute counts
+    # group findings and counts
     grouped: Dict[str, List[Dict]] = defaultdict(list)
     for f in report.get("findings", []) or []:
         grouped[(f.get("platform") or "other").lower()].append(f)
-
     summary = report.get("summary") or {}
     counts = {
         "blocking": int(summary.get("blocking", 0) or 0),
@@ -145,14 +111,14 @@ def render_html(report: Dict) -> str:
         "fyi":      int(summary.get("fyi", 0) or 0),
     }
 
-    # If the template looks like Jinja and jinja2 is present, use it
-    if template and re.search(r"({{.*?}}|{%.+?%})", template, re.S):
+    # If the template looks like Jinja, try to render with Jinja2.
+    if jinja_template and re.search(r"({{.*?}}|{%.+?%})", jinja_template, re.S):
         try:
             from jinja2 import Environment, BaseLoader, select_autoescape
             env = Environment(loader=BaseLoader(),
                               autoescape=select_autoescape(enabled_extensions=("html",)),
                               trim_blocks=True, lstrip_blocks=True)
-            jtpl = env.from_string(template)
+            jtpl = env.from_string(jinja_template)
             groups_ctx = [
                 {"name": "iOS",     "cards": _cards_for(grouped, "ios")},
                 {"name": "Android", "cards": _cards_for(grouped, "android")},
@@ -160,14 +126,11 @@ def render_html(report: Dict) -> str:
             ]
             return jtpl.render(css=css, summary=counts, groups=groups_ctx)
         except Exception:
-            # jinja2 missing or template error: manual render
+            # No Jinja or template error — fall back to pure HTML template below
             pass
 
-        # Manual render (no dependency)
-        return _manual_render_jinja(template, css, counts, grouped)
-
-    # Non-Jinja path: string replace with fallback tokens
-    base = template or _FALLBACK_TEMPLATE
+    # Fall back to simple string-replacement template that always shows counts/cards
+    base = _FALLBACK_TEMPLATE
     return (base
             .replace("{{ CSS }}", css)
             .replace("{{ BLOCKING_COUNT }}", str(counts["blocking"]))
