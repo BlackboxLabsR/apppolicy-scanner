@@ -1,0 +1,6 @@
+{
+  "platform":"android",
+  "permissions":["android.permission.ACCESS_BACKGROUND_LOCATION"],
+  "targetsdk":31,
+  "deps":[]
+}

@@ -1,156 +1,141 @@
 from __future__ import annotations
-import html
-import json
+import html, json, re
 from collections import defaultdict
 from importlib import resources
 from typing import Dict, List
-from jinja2 import Environment, BaseLoader
 
+# Fallback HTML/CSS (no Jinja) that includes summary counts and rendered cards
+_FALLBACK_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AppPolicy Report</title>
+  <style>{{ CSS }}</style>
+</head>
+<body>
+  <header>
+    <h1>AppPolicy Report</h1>
+    <div class="summary">
+      <span class="badge sev-blocking">Blocking: {{ BLOCKING_COUNT }}</span>
+      <span class="badge sev-advisory">Advisory: {{ ADVISORY_COUNT }}</span>
+      <span class="badge sev-fyi">FYI: {{ FYI_COUNT }}</span>
+    </div>
+  </header>
+  <main>
+    <section><h2>iOS</h2><div class="cards">{{ IOS_CARDS }}</div></section>
+    <section><h2>Android</h2><div class="cards">{{ ANDROID_CARDS }}</div></section>
+    <section><h2>Other</h2><div class="cards">{{ OTHER_CARDS }}</div></section>
+  </main>
+</body>
+</html>
+"""
 
-# NOTE: We keep rendering logic here but structure & CSS live in /templates and /assets.
+_FALLBACK_CSS = """:root { --bg:#fff; --fg:#111; --muted:#666; --card:#fafafa; }
+body { font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); margin:24px; }
+.summary { margin: 6px 0 18px; }
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; margin-right:6px; }
+.sev-blocking { background:#fee; color:#900; } .sev-advisory { background:#eef; color:#225; } .sev-fyi { background:#efe; color:#252; }
+.cards { display:grid; gap:12px; grid-template-columns:1fr; }
+.card { background:var(--card); border:1px solid #e5e5e5; border-radius:12px; padding:14px; }
+.title { font-weight:600; margin-bottom:6px; }
+.policy { margin:4px 0 8px; color:var(--muted); }
+"""
 
-def _load_text(package: str, resource_path: str) -> str:
-    """
-    Load a text resource from the package (PEP 302 importlib.resources).
-    """
-    return resources.files(package).joinpath(resource_path).read_text(encoding="utf-8")
+def _res_text(path: str) -> str:
+    try:
+        return (resources.files("apcop") / path).read_text(encoding="utf-8")
+    except Exception:
+        return ""
 
 def severity_badge(sev: str) -> str:
     sev = (sev or "advisory").lower()
-    cls = {"blocking": "sev-blocking", "advisory": "sev-advisory", "fyi": "sev-fyi"}.get(sev, "sev-advisory")
+    cls = {"blocking":"sev-blocking","advisory":"sev-advisory","fyi":"sev-fyi"}.get(sev,"sev-advisory")
     return f'<span class="badge {cls}">{html.escape(sev.upper())}</span>'
 
-# --- Curated Why/How for top rules (fallbacks applied if not present) ----
-WHY_MAP: Dict[str, str] = {
-    "android.target_sdk.minimum":
-        "Google Play requires apps to target recent Android API levels to ensure security and platform compatibility.",
-    "android.permission.background_location.disclosure":
-        "Background location access is sensitive; Play policy requires limited use and clear disclosure.",
-    "apple.required_reason.pasteboard":
-        "UIPasteboard access can expose user data; Apple requires a declared reason in the Privacy Manifest.",
-    "apple.account_deletion.required":
-        "If users can create an account, they must be able to delete it within the app (App Store Guideline 5.1.1(v)).",
-}
-
-HOW_MAP: Dict[str, List[str]] = {
-    "android.target_sdk.minimum": [
-        "Update `targetSdkVersion` in `build.gradle` to the current policy minimum.",
-        "Run a regression build and address any API behavior changes.",
-        "Re-submit after confirming store requirements are met."
-    ],
-    "android.permission.background_location.disclosure": [
-        "Provide prominent in-app disclosure describing the background usage.",
-        "Limit access to cases where it is strictly necessary; prefer foreground location when possible.",
-        "Ensure store listing reflects location usage per Play policy."
-    ],
-    "apple.required_reason.pasteboard": [
-        "Add a UIPasteboard reason to `PrivacyInfo.xcprivacy` (Privacy Manifest).",
-        "Remove or gate unnecessary pasteboard reads; prefer explicit user actions where possible."
-    ],
-    "apple.account_deletion.required": [
-        "Add an in-app 'Delete Account' path reachable wherever accounts can be created.",
-        "Invoke backend deletion and remove associated data as applicable.",
-        "Confirm behavior with Apple’s guideline 5.1.1(v) before re-submit."
-    ],
-}
-
-def _why_how_for(f: Dict) -> tuple[str, List[str]]:
-    """Return (why, how_list) with graceful fallbacks using the rule's 'because' fields."""
-    fid = f.get("id", "")
-    because = f.get("because", {}) or {}
-    url = (because.get("url") or "").strip()
-    section = (because.get("section") or "").strip()
-
-    why = WHY_MAP.get(fid)
-    how = HOW_MAP.get(fid)
-
-    if not why:
-        base = "This may impact review/approval or violate current policy."
-        if section:
-            base = f"{section}. " + base
-        why = base
-
-    if not how:
-        tip = "See the linked policy documentation for exact remediation steps."
-        if url:
-            tip = f"Review the policy doc and update your app accordingly: {url}"
-        how = [tip]
-
-    return why, how
-
 def _render_card(f: Dict) -> str:
-    sev = f.get("severity", "advisory")
-    because = f.get("because", {}) or {}
-    url = because.get("url") or ""
-    section = because.get("section") or ""
+    sev = f.get("severity","advisory")
+    because = f.get("because",{}) or {}
+    url = because.get("url") or ""; section = because.get("section") or ""
+    plat = (f.get("platform") or "").lower()
+    plat_badge = " 🍎 iOS" if plat=="ios" else (" 🤖 Android" if plat=="android" else "")
+
+    # policy link
     doc_link = ""
     if url or section:
         link_text = html.escape(section) if section else html.escape(url)
-        u = html.escape(url) if url else "#"
-        # fixed anchor tag
-        doc_link = f'<div class="policy"><b>Policy:</b> <a href="{u}" target="_blank" rel="noreferrer noopener">{link_text}</a></div>'
+        doc_link = f'<div class="policy"><b>Policy:</b> <a href="{html.escape(url) or "#"}" target="_blank" rel="noreferrer noopener">{link_text}</a></div>'
 
-    # Why / How (curated + fallbacks)
-    why, how_list = _why_how_for(f)
+    # why/how
+    section_text = because.get("section") or ""
+    remediation: List[str] = []
+    then_obj = f.get("then") or {}
+    if isinstance(then_obj, dict) and isinstance(then_obj.get("remediation"), list):
+        remediation = then_obj["remediation"]
+    if not remediation:
+        remediation = f.get("remediation") or []
 
-    # Missing / Required list (if any)
-    missing = f.get("missing") or []
-    missing_html = ""
-    if missing:
-        items = []
-        for m in missing:
-            if isinstance(m, dict):
-                items.append(f"<li><code>{html.escape(json.dumps(m))}</code></li>")
-            else:
-                items.append(f"<li><code>{html.escape(str(m))}</code></li>")
-        missing_html = "<div><strong>Missing / Required:</strong></div><ul>" + "".join(items) + "</ul>"
-
-    # Evidence (optional)
-    evidence = f.get("evidence") or {}
-    ev_html = ""
-    if evidence:
-        ev_html = f"<details><summary>Evidence</summary><pre>{html.escape(json.dumps(evidence, indent=2))}</pre></details>"
-
-    # Render How list as bullets
+    why_html = f'<div class="why"><b>Why this matters:</b> {html.escape(section_text)}</div>' if section_text else ""
     how_html = ""
-    if how_list:
-        bullets = "".join(f"<li>{html.escape(step)}</li>" for step in how_list)
-        how_html = f'<div class="how"><b>How to fix:</b><ul>{bullets}</ul></div>'
+    if remediation:
+        items = "".join(f"<li>{html.escape(r)}</li>" for r in remediation)
+        how_html = f'<div class="how"><b>How to fix:</b><ul>{items}</ul></div>'
+
+    # evidence
+    ev = f.get("evidence") or {}
+    ev_html = f"<details><summary>Evidence</summary><pre>{html.escape(json.dumps(ev, indent=2))}</pre></details>" if ev else ""
 
     return (
         '<div class="card">'
-        f'<div class="title">{severity_badge(sev)} <span class="id">{html.escape(f.get("id",""))}</span></div>'
-        f'{doc_link}'
-        f'<div class="why"><b>Why this matters:</b> {html.escape(why)}</div>'
-        f'{how_html}'
-        f'{missing_html}'
-        f'{ev_html}'
+        f'<div class="title">{severity_badge(sev)} <span class="id">{html.escape(f.get("id",""))}</span>{plat_badge}</div>'
+        f'{doc_link}{why_html}{how_html}{ev_html}'
         '</div>'
     )
 
-def render_html(report: Dict) -> str:
-    # Load raw template & CSS
-    template_src = _load_text("apcop.templates", "report.html")
-    css = _load_text("apcop.assets", "report.css")
+def _cards_for(grouped: Dict[str, List[Dict]], key: str) -> str:
+    L = grouped.get(key, [])
+    return "\n".join(_render_card(f) for f in L) if L else '<div class="card">No findings.</div>'
 
-    # Group findings
+def render_html(report: Dict) -> str:
+    # Load packaged template (may be Jinja) and CSS
+    jinja_template = _res_text("templates/report.html")
+    css = _res_text("assets/report.css") or _FALLBACK_CSS
+
+    # group findings and counts
     grouped: Dict[str, List[Dict]] = defaultdict(list)
     for f in report.get("findings", []) or []:
-        # enrich why/how in place for convenience
-        why, how = _why_how_for(f)
-        f["why"], f["how"] = why, how
         grouped[(f.get("platform") or "other").lower()].append(f)
-
     summary = report.get("summary") or {}
-    env = Environment(loader=BaseLoader(), autoescape=True)
-    tmpl = env.from_string(template_src)
-    html_out = tmpl.render(
-        summary={
-            "blocking": int(summary.get("blocking") or 0),
-            "advisory": int(summary.get("advisory") or 0),
-            "fyi": int(summary.get("fyi") or 0),
-        },
-        findings=report.get("findings") or [],
-        css=css,
-    )
-    return html_out
+    counts = {
+        "blocking": int(summary.get("blocking", 0) or 0),
+        "advisory": int(summary.get("advisory", 0) or 0),
+        "fyi":      int(summary.get("fyi", 0) or 0),
+    }
+
+    # If the template looks like Jinja, try to render with Jinja2.
+    if jinja_template and re.search(r"({{.*?}}|{%.+?%})", jinja_template, re.S):
+        try:
+            from jinja2 import Environment, BaseLoader, select_autoescape
+            env = Environment(loader=BaseLoader(),
+                              autoescape=select_autoescape(enabled_extensions=("html",)),
+                              trim_blocks=True, lstrip_blocks=True)
+            jtpl = env.from_string(jinja_template)
+            groups_ctx = [
+                {"name": "iOS",     "cards": _cards_for(grouped, "ios")},
+                {"name": "Android", "cards": _cards_for(grouped, "android")},
+                {"name": "Other",   "cards": _cards_for(grouped, "other")},
+            ]
+            return jtpl.render(css=css, summary=counts, groups=groups_ctx)
+        except Exception:
+            # No Jinja or template error — fall back to pure HTML template below
+            pass
+
+    # Fall back to simple string-replacement template that always shows counts/cards
+    base = _FALLBACK_TEMPLATE
+    return (base
+            .replace("{{ CSS }}", css)
+            .replace("{{ BLOCKING_COUNT }}", str(counts["blocking"]))
+            .replace("{{ ADVISORY_COUNT }}", str(counts["advisory"]))
+            .replace("{{ FYI_COUNT }}", str(counts["fyi"]))
+            .replace("{{ IOS_CARDS }}", _cards_for(grouped, "ios"))
+            .replace("{{ ANDROID_CARDS }}", _cards_for(grouped, "android"))
+            .replace("{{ OTHER_CARDS }}", _cards_for(grouped, "other")))
